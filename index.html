@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jeu de Conjugaison 3D - CE1</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Arial', sans-serif; background: #87ceeb; touch-action: none; }
+        canvas { display: block; position: absolute; top: 0; left: 0; }
+        
+        /* Layer pour les confettis au-dessus de tout le reste lors de la victoire */
+        #particle-container {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 150; 
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            color: white;
+            z-index: 10;
+        }
+        .panel {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            padding: 8px 20px;
+            border-radius: 20px;
+            pointer-events: auto;
+            border: 2px solid rgba(255,255,255,0.4);
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        #menu-screen, #result-screen {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        #result-screen {
+            background: linear-gradient(to bottom, rgba(79, 172, 254, 0.95) 0%, rgba(0, 242, 254, 0.95) 100%);
+        }
+        .btn-mode {
+            background: white;
+            color: #3b82f6;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            pointer-events: auto;
+            margin: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            text-align: center;
+            border-bottom: 5px solid #d1d5db;
+        }
+        .btn-mode:hover { transform: scale(1.05); }
+        .btn-mode:active { transform: scale(0.95); border-bottom-width: 0px; margin-top: 15px; }
+        
+        .btn-play { background: #22c55e; color: white; border-color: #166534; }
+        .btn-play:hover { background: #16a34a; }
+        .btn-lesson { background: #a855f7; color: white; border-color: #6b21a8; }
+        .btn-lesson:hover { background: #9333ea; }
+
+        #question-display {
+            position: absolute;
+            top: 80px;
+            width: 100%;
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: bold;
+            display: none;
+            padding: 0 20px;
+            color: white;
+            text-shadow: 0 3px 10px rgba(0,0,0,0.8);
+            pointer-events: none;
+        }
+        b { color: #ffeb3b; font-weight: 900; }
+        .btn-quit {
+            background: #ef4444;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 15px;
+            font-weight: bold;
+            pointer-events: auto;
+            cursor: pointer;
+            border: 2px solid #b91c1c;
+        }
+        .hidden { display: none !important; }
+        .star { font-size: 3.5rem; color: #bbbcbe; text-shadow: 0 0 10px rgba(0,0,0,0.2); transition: color 0.5s;}
+        .star.active { color: #ffeb3b; text-shadow: 0 0 20px rgba(255, 235, 59, 0.8); }
+        .trophy { font-size: 7rem; margin-bottom: 10px; filter: drop-shadow(0 10px 10px rgba(0,0,0,0.2)); }
+    </style>
+</head>
+<body>
+
+    <div id="particle-container"></div>
+
+    <div id="menu-screen">
+        <div id="main-menu" class="flex flex-col items-center">
+            <h1 class="text-5xl md:text-6xl font-extrabold text-white mb-4 drop-shadow-lg text-center leading-tight">✈️ DÉFI AÉRIEN</h1>
+            <p class="text-yellow-300 text-2xl md:text-3xl font-bold mb-10 drop-shadow-md text-center bg-black/20 py-2 px-6 rounded-full">Le présent des verbes en -ER</p>
+            
+            <div class="flex flex-col sm:flex-row items-center gap-4">
+                <div class="btn-mode btn-play w-64" onclick="startGame()">🎮 JOUER !</div>
+                <div class="btn-mode btn-lesson w-64" onclick="showLesson()">📖 LEÇON</div>
+            </div>
+        </div>
+
+        <div id="lesson-screen" class="hidden flex-col items-center w-full max-w-4xl px-4 w-full">
+            <h2 class="text-3xl font-extrabold text-white mb-6 drop-shadow-lg text-center">📖 Le présent des verbes en -ER</h2>
+            <div class="relative w-full rounded-2xl overflow-hidden shadow-2xl bg-black border-4 border-white/50" style="padding-top: 56.25%;">
+                <iframe class="absolute top-0 left-0 w-full h-full" src="https://lesfondamentaux.reseau-canope.fr/embed/video/le-present-des-verbes-en-er" frameborder="0" allowfullscreen="true"></iframe>
+            </div>
+            <button class="mt-8 text-white text-xl bg-gray-600 hover:bg-gray-700 py-3 px-10 rounded-full font-bold shadow-lg border-b-4 border-gray-800 transition-transform active:scale-95" onclick="hideLesson()">⬅️ Retour</button>
+        </div>
+    </div>
+
+    <!-- Écran de Résultat -->
+    <div id="result-screen" class="hidden">
+        <div id="reward-content" class="flex flex-col items-center text-white text-center">
+            <div id="trophy-container" class="trophy">🏆</div>
+            <h2 class="text-5xl font-extrabold mb-4 drop-shadow-lg">Fin du vol !</h2>
+            <p id="final-score-text" class="text-3xl font-bold mb-6 text-yellow-300 drop-shadow-md">Score : 12/12</p>
+            <div class="flex gap-4 mb-10">
+                <span id="star1" class="star">★</span>
+                <span id="star2" class="star">★</span>
+                <span id="star3" class="star">★</span>
+            </div>
+            <div class="btn-mode w-64" onclick="backToMenu()">Rejouer 🔄</div>
+        </div>
+    </div>
+
+    <div id="ui-layer" class="hidden">
+        <div class="flex justify-between items-start w-full">
+            <div class="btn-quit" onclick="endGame()">QUITTER</div>
+            <div class="flex gap-4">
+                <div class="panel">Question: <span id="q-count">1</span>/12</div>
+                <div class="panel text-yellow-300">Score: <span id="score">0</span></div>
+            </div>
+        </div>
+        <div id="question-display">...</div>
+        <div class="w-full flex justify-center mb-6">
+            <div id="control-hint" class="panel italic text-sm">Touche les coins de l'écran pour te déplacer</div>
+        </div>
+    </div>
+
+    <script>
+        // --- AUDIO ---
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx, motorOsc, motorGain;
+
+        function initAudio() {
+            if (audioCtx) {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                motorGain.gain.setTargetAtTime(0.02, audioCtx.currentTime, 0.1);
+                return;
+            }
+            audioCtx = new AudioCtx();
+            motorOsc = audioCtx.createOscillator();
+            motorOsc.type = 'sawtooth';
+            motorOsc.frequency.setValueAtTime(55, audioCtx.currentTime); 
+            motorGain = audioCtx.createGain();
+            motorGain.gain.setValueAtTime(0.02, audioCtx.currentTime);
+            motorOsc.connect(motorGain);
+            motorGain.connect(audioCtx.destination);
+            motorOsc.start();
+        }
+
+        function playMoveSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.12);
+            g.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+        }
+
+        function playWinSound() {
+            if (!audioCtx) return;
+            [523, 659, 783].forEach((f, i) => {
+                const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+                o.frequency.setValueAtTime(f, audioCtx.currentTime + i*0.05);
+                g.gain.setValueAtTime(0.03, audioCtx.currentTime + i*0.05);
+                g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + i*0.05 + 0.4);
+                o.connect(g); g.connect(audioCtx.destination);
+                o.start(audioCtx.currentTime + i*0.05); o.stop(audioCtx.currentTime + i*0.05 + 0.4);
+            });
+        }
+
+        // --- DATABASE GÉNÉRATEUR (1er groupe) ---
+        function generate1stGroupQuestions() {
+            const verbs = [
+                { v: "chanter", root: "chant" }, { v: "jouer", root: "jou" },
+                { v: "parler", root: "parl" }, { v: "danser", root: "dans" },
+                { v: "sauter", root: "saut" }, { v: "regarder", root: "regard" },
+                { v: "dessiner", root: "dessin" }, { v: "voler", root: "vol" },
+                { v: "écouter", root: "écout" }, { v: "laver", root: "lav" },
+                { v: "donner", root: "donn" }, { v: "raconter", root: "racont" },
+                { v: "aimer", root: "aim" }, { v: "marcher", root: "march" }
+            ];
+            
+            const terms = [
+                { pron: "Je", t: "e", wrong: ["es", "ons", "ent"] },
+                { pron: "Tu", t: "es", wrong: ["e", "ez", "ent"] },
+                { pron: "Il / Elle", t: "e", wrong: ["es", "ons", "ez"] },
+                { pron: "Nous", t: "ons", wrong: ["ez", "ent", "e"] },
+                { pron: "Vous", t: "ez", wrong: ["ons", "ent", "es"] },
+                { pron: "Ils / Elles", t: "ent", wrong: ["e", "ons", "ez"] }
+            ];
+
+            let questions = [];
+            for(let verb of verbs) {
+                for(let term of terms) {
+                    let correct = verb.root + term.t;
+                    let options = [correct];
+                    term.wrong.forEach(w => options.push(verb.root + w));
+                    
+                    let subject = term.pron;
+                    if(subject === "Je" && /^[aeiouéèh]/i.test(verb.v)) {
+                        subject = "J'";
+                    }
+                    
+                    questions.push({
+                        q: `<b>${subject}</b> (${verb.v})`,
+                        options: options,
+                        correct: 0 // La première option est la bonne, sera mélangée ensuite
+                    });
+                }
+            }
+            return questions;
+        }
+
+        const POSITIONS = {
+            TL: { x: -8, y: 6 }, TR: { x: 8, y: 6 },
+            BL: { x: -8, y: -6 }, BR: { x: 8, y: -6 },
+            L: { x: -8, y: 0 }, R: { x: 8, y: 0 }
+        };
+
+        let scene, camera, renderer, plane, clouds = [], gates = [], particles = [];
+        let pScene, pCamera, pRenderer;
+        let gameActive = false, currentQuestions = [], questionIndex = 0;
+        let score = 0, speed = 0.35, maxQuestions = 12;
+        let targetPos = { x: 0, y: 0 }, currentPosKey = "L";
+        let allowedPositions = [];
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+            scene.fog = new THREE.Fog(0x87ceeb, 20, 250);
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 20;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
+
+            pScene = new THREE.Scene();
+            pCamera = new THREE.OrthographicCamera(-20, 20, 20, -20, 0.1, 100);
+            pCamera.position.z = 10;
+            pRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            pRenderer.setSize(window.innerWidth, window.innerHeight);
+            pRenderer.domElement.style.pointerEvents = "none";
+            document.getElementById('particle-container').appendChild(pRenderer.domElement);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+            const sun = new THREE.DirectionalLight(0xffffff, 1);
+            sun.position.set(10, 20, 15);
+            scene.add(sun);
+
+            createPlane();
+            createClouds();
+
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('touchstart', handleTouch, { passive: false });
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createPlane() {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), new THREE.MeshPhongMaterial({ color: 0xff3333 }));
+            body.scale.set(1, 0.8, 2.8); group.add(body);
+            const wings = new THREE.Mesh(new THREE.BoxGeometry(7, 0.2, 1.5), new THREE.MeshPhongMaterial({ color: 0xff3333 }));
+            wings.position.z = 0.5; group.add(wings);
+            const prop = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 0.1), new THREE.MeshPhongMaterial({ color: 0x111111 }));
+            prop.position.z = 3.2; prop.name = "propeller"; group.add(prop);
+            plane = group; scene.add(plane);
+        }
+
+        function createClouds() {
+            const mat = new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+            for(let i=0; i<40; i++) {
+                const g = new THREE.Group();
+                for(let j=0; j<3; j++) {
+                    const s = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 8), mat);
+                    s.position.set(j*2, (Math.random()-0.5)*2, (Math.random()-0.5)*2);
+                    g.add(s);
+                }
+                g.position.set((Math.random()-0.5)*120, (Math.random()-0.5)*60, -Math.random()*250);
+                scene.add(g); clouds.push(g);
+            }
+        }
+
+        function showLesson() {
+            document.getElementById('main-menu').classList.add('hidden');
+            document.getElementById('lesson-screen').classList.remove('hidden');
+            document.getElementById('lesson-screen').style.display = 'flex';
+        }
+
+        function hideLesson() {
+            document.getElementById('lesson-screen').classList.add('hidden');
+            document.getElementById('main-menu').classList.remove('hidden');
+        }
+
+        function startGame() {
+            initAudio();
+            clearParticles();
+            
+            let pool = generate1stGroupQuestions();
+            // Mélanger le pool de questions
+            for (let i = pool.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [pool[i], pool[j]] = [pool[j], pool[i]];
+            }
+            
+            currentQuestions = [];
+            for(let k=0; k<maxQuestions; k++) {
+                currentQuestions.push(pool[k % pool.length]);
+            }
+            
+            score = 0; questionIndex = 0; gameActive = true;
+            document.getElementById('menu-screen').style.display = 'none';
+            document.getElementById('result-screen').classList.add('hidden');
+            document.getElementById('ui-layer').classList.remove('hidden');
+            document.getElementById('question-display').style.display = 'block';
+            updateUI();
+            nextCycle();
+        }
+
+        function nextCycle() {
+            if(!gameActive) return;
+            if(questionIndex >= currentQuestions.length) { showRewardScreen(); return; }
+            
+            clearGates();
+            updateUI();
+            const q = currentQuestions[questionIndex];
+            document.getElementById('question-display').innerHTML = q.q;
+            
+            let optionsWithStatus = q.options.map((opt, idx) => ({ text: opt, isCorrect: idx === q.correct }));
+            // Mélanger les propositions
+            for (let i = optionsWithStatus.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [optionsWithStatus[i], optionsWithStatus[j]] = [optionsWithStatus[j], optionsWithStatus[i]];
+            }
+
+            allowedPositions = ["TL", "TR", "BL", "BR"];
+
+            if (!allowedPositions.includes(currentPosKey)) {
+                currentPosKey = allowedPositions[0];
+                targetPos = POSITIONS[currentPosKey];
+            }
+
+            optionsWithStatus.forEach((optObj, i) => {
+                const gate = new THREE.Group();
+                const pos = POSITIONS[allowedPositions[i]];
+                const ring = new THREE.Mesh(new THREE.TorusGeometry(4.5, 0.4, 12, 32), new THREE.MeshPhongMaterial({ color: 0xffcc00 }));
+                gate.add(ring);
+                const textMat = new THREE.MeshBasicMaterial({ map: createTextTexture(optObj.text), transparent: true });
+                const textMesh = new THREE.Mesh(new THREE.PlaneGeometry(8, 4), textMat);
+                gate.add(textMesh);
+                gate.position.set(pos.x, pos.y, -180);
+                gate.userData = { isCorrect: optObj.isCorrect };
+                scene.add(gate); gates.push(gate);
+            });
+        }
+
+        function showRewardScreen() {
+            gameActive = false;
+            clearGates();
+            if(motorGain) motorGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.2);
+            document.getElementById('ui-layer').classList.add('hidden');
+            document.getElementById('result-screen').classList.remove('hidden');
+
+            const finalScore = score / 10;
+            document.getElementById('final-score-text').innerText = `Tu as obtenu ${finalScore}/${maxQuestions}`;
+
+            const s1 = document.getElementById('star1');
+            const s2 = document.getElementById('star2');
+            const s3 = document.getElementById('star3');
+            const trophy = document.getElementById('trophy-container');
+            
+            s1.classList.remove('active'); s2.classList.remove('active'); s3.classList.remove('active');
+            
+            // Barème de récompenses
+            if(finalScore >= 1) s1.classList.add('active');
+            if(finalScore >= 6) s2.classList.add('active');
+            if(finalScore >= 10) s3.classList.add('active');
+            
+            if(finalScore === maxQuestions) {
+                trophy.innerText = "🏆"; // Or + confettis
+                spawnConfetti(350); 
+                playWinSound();
+            } else if(finalScore >= 10) {
+                trophy.innerText = "🥈"; // Argent
+                spawnConfetti(150);
+            } else if(finalScore >= 6) {
+                trophy.innerText = "🥉"; // Bronze
+            } else {
+                trophy.innerText = "💨"; // Vent (A encourager)
+            }
+        }
+
+        function spawnConfetti(count = 100) {
+            for(let i=0; i<count; i++) {
+                const p = new THREE.Mesh(
+                    new THREE.PlaneGeometry(0.4, 0.4), 
+                    new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(Math.random(), 0.8, 0.6), side: 2 })
+                );
+                p.position.set((Math.random()-0.5)*40, 25 + Math.random()*20, 1);
+                p.userData = { 
+                    v: new THREE.Vector3((Math.random()-0.5)*0.2, -0.15 - Math.random()*0.2, 0), 
+                    rot: new THREE.Vector3(Math.random()*0.1, Math.random()*0.1, Math.random()*0.1),
+                    life: 600 
+                };
+                pScene.add(p); particles.push(p);
+            }
+        }
+
+        function clearParticles() {
+            particles.forEach(p => { scene.remove(p); pScene.remove(p); });
+            particles = [];
+        }
+
+        function handleKeyDown(e) {
+            if(!gameActive) return;
+            let old = currentPosKey;
+            if(e.key === "ArrowLeft") currentPosKey = currentPosKey.replace("R", "L");
+            if(e.key === "ArrowRight") currentPosKey = currentPosKey.replace("L", "R");
+            if(e.key === "ArrowUp") currentPosKey = currentPosKey.replace("B", "T");
+            if(e.key === "ArrowDown") currentPosKey = currentPosKey.replace("T", "B");
+            
+            if(old !== currentPosKey) { targetPos = POSITIONS[currentPosKey]; playMoveSound(); }
+        }
+
+        function handleTouch(e) {
+            if(!gameActive) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            const x = touch.clientX / window.innerWidth;
+            const y = touch.clientY / window.innerHeight;
+            let old = currentPosKey;
+            
+            let h = (x < 0.5) ? "L" : "R";
+            let v = (y < 0.5) ? "T" : "B";
+            currentPosKey = v + h;
+            
+            if(old !== currentPosKey) { targetPos = POSITIONS[currentPosKey]; playMoveSound(); }
+        }
+
+        function createTextTexture(text) {
+            const c = document.createElement('canvas'); const ctx = c.getContext('2d');
+            c.width = 1024; c.height = 512;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.beginPath(); ctx.roundRect(50, 50, 924, 412, 80); ctx.fill();
+            ctx.fillStyle = '#000000';
+            let fontSize = 250;
+            ctx.font = `bold ${fontSize}px Arial`;
+            while(ctx.measureText(text).width > 850 && fontSize > 40) {
+                fontSize -= 10; ctx.font = `bold ${fontSize}px Arial`;
+            }
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(text, 512, 256);
+            const texture = new THREE.CanvasTexture(c);
+            texture.anisotropy = 16;
+            return texture;
+        }
+
+        function showFeedback(correct) {
+            if(correct) {
+                playWinSound();
+                for(let i=0; i<15; i++) {
+                    const p = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.2), new THREE.MeshBasicMaterial({ color: 0xffff00, side: 2 }));
+                    p.position.copy(plane.position);
+                    p.userData = { v: new THREE.Vector3((Math.random()-0.5)*0.5, (Math.random()-0.5)*0.5, Math.random()*0.3), life: 60 };
+                    scene.add(p); particles.push(p);
+                }
+            } else {
+                const el = document.createElement('div');
+                el.innerText = "❌";
+                el.style.cssText = "position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:100px;z-index:200;pointer-events:none;color:red;font-weight:bold;text-shadow: 2px 2px 10px black;";
+                document.body.appendChild(el);
+                setTimeout(() => el.remove(), 600);
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Lissage mouvement avion
+            plane.position.x += (targetPos.x - plane.position.x) * 0.12;
+            plane.position.y += (targetPos.y - plane.position.y) * 0.12;
+            plane.rotation.z = (targetPos.x - plane.position.x) * -0.05;
+            const prop = plane.getObjectByName("propeller");
+            if(prop) prop.rotation.z += 2.2;
+
+            // Décor
+            clouds.forEach(c => {
+                c.position.z += speed;
+                if(c.position.z > 30) c.position.z = -220;
+            });
+
+            // Particules (Confettis et Feedback)
+            for(let i=particles.length-1; i>=0; i--) {
+                const p = particles[i];
+                p.position.add(p.userData.v); 
+                if(p.userData.rot) {
+                    p.rotation.x += p.userData.rot.x;
+                    p.rotation.y += p.userData.rot.y;
+                    p.rotation.z += p.userData.rot.z;
+                }
+                p.userData.life--;
+                if(p.userData.life <= 0) { 
+                    scene.remove(p); 
+                    pScene.remove(p);
+                    particles.splice(i, 1); 
+                }
+            }
+
+            if(gameActive) {
+                gates.forEach((g) => {
+                    g.position.z += speed;
+                    if(g.position.z > 17 && g.position.z < 20) {
+                        const dist = plane.position.distanceTo(new THREE.Vector3(g.position.x, g.position.y, plane.position.z));
+                        if(dist < 5.5) {
+                            if(g.userData.isCorrect) { score += 10; showFeedback(true); }
+                            else { showFeedback(false); }
+                            questionIndex++;
+                            nextCycle();
+                        }
+                    } else if(g.position.z > 25) {
+                        showFeedback(false);
+                        questionIndex++;
+                        nextCycle();
+                    }
+                });
+            }
+            
+            renderer.render(scene, camera);
+            pRenderer.render(pScene, pCamera);
+        }
+
+        function updateUI() {
+            document.getElementById('score').innerText = score;
+            document.getElementById('q-count').innerText = Math.min(questionIndex + 1, maxQuestions);
+        }
+
+        function clearGates() {
+            gates.forEach(g => scene.remove(g));
+            gates = [];
+        }
+
+        function backToMenu() {
+            clearParticles();
+            document.getElementById('result-screen').classList.add('hidden');
+            document.getElementById('menu-screen').style.display = 'flex';
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            pRenderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function endGame() {
+            gameActive = false; clearGates(); clearParticles();
+            if(motorGain) motorGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.2);
+            document.getElementById('ui-layer').classList.add('hidden');
+            document.getElementById('menu-screen').style.display = 'flex';
+        }
+
+        window.onload = () => { init(); animate(); };
+    </script>
+</body>
+</html>
