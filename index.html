@@ -105,6 +105,34 @@
         .star { font-size: 3.5rem; color: #bbbcbe; text-shadow: 0 0 10px rgba(0,0,0,0.2); transition: color 0.5s;}
         .star.active { color: #ffeb3b; text-shadow: 0 0 20px rgba(255, 235, 59, 0.8); }
         .trophy { font-size: 7rem; margin-bottom: 10px; filter: drop-shadow(0 10px 10px rgba(0,0,0,0.2)); }
+
+        /* Style neutre et doux pour la correction */
+        #feedback-banner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 200;
+            pointer-events: none;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 80%;
+            max-width: 500px;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(10px);
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            text-align: center;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn {
+            0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -122,7 +150,7 @@
             </div>
         </div>
 
-        <div id="lesson-screen" class="hidden flex-col items-center w-full max-w-4xl px-4 w-full">
+        <div id="lesson-screen" class="hidden flex-col items-center w-full max-w-4xl px-4">
             <h2 class="text-3xl font-extrabold text-white mb-6 drop-shadow-lg text-center">📖 Le présent des verbes en -ER</h2>
             <div class="relative w-full rounded-2xl overflow-hidden shadow-2xl bg-black border-4 border-white/50" style="padding-top: 56.25%;">
                 <iframe class="absolute top-0 left-0 w-full h-full" src="https://lesfondamentaux.reseau-canope.fr/embed/video/le-present-des-verbes-en-er" frameborder="0" allowfullscreen="true"></iframe>
@@ -144,6 +172,12 @@
             </div>
             <div class="btn-mode w-64" onclick="backToMenu()">Rejouer 🔄</div>
         </div>
+    </div>
+
+    <!-- Bannière de correction d'erreur (Soft Feedback) -->
+    <div id="feedback-banner">
+        <p class="text-2xl text-white font-bold mb-2">La bonne réponse était :</p>
+        <p class="text-5xl text-yellow-300 font-extrabold" id="feedback-correct-answer"></p>
     </div>
 
     <div id="ui-layer" class="hidden">
@@ -207,6 +241,19 @@
             });
         }
 
+        function playLoseSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = 'triangle'; // Son plus doux
+            osc.frequency.setValueAtTime(250, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(150, audioCtx.currentTime + 0.3);
+            g.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+        }
+
         // --- DATABASE GÉNÉRATEUR (1er groupe) ---
         function generate1stGroupQuestions() {
             const verbs = [
@@ -243,7 +290,8 @@
                     questions.push({
                         q: `<b>${subject}</b> (${verb.v})`,
                         options: options,
-                        correct: 0 // La première option est la bonne, sera mélangée ensuite
+                        correctAnswerText: correct, 
+                        correct: 0 
                     });
                 }
             }
@@ -256,12 +304,13 @@
             L: { x: -8, y: 0 }, R: { x: 8, y: 0 }
         };
 
-        let scene, camera, renderer, plane, clouds = [], gates = [], particles = [];
+        let scene, camera, renderer, plane, clouds = [], gates = [], particles = [], trailParticles = [];
         let pScene, pCamera, pRenderer;
         let gameActive = false, currentQuestions = [], questionIndex = 0;
-        let score = 0, speed = 0.35, maxQuestions = 12;
+        let score = 0, speed = 0.35, maxQuestions = 12, frameCount = 0;
         let targetPos = { x: 0, y: 0 }, currentPosKey = "L";
         let allowedPositions = [];
+        let isWaitingFeedback = false; 
 
         function init() {
             scene = new THREE.Scene();
@@ -298,13 +347,110 @@
 
         function createPlane() {
             const group = new THREE.Group();
-            const body = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), new THREE.MeshPhongMaterial({ color: 0xff3333 }));
-            body.scale.set(1, 0.8, 2.8); group.add(body);
-            const wings = new THREE.Mesh(new THREE.BoxGeometry(7, 0.2, 1.5), new THREE.MeshPhongMaterial({ color: 0xff3333 }));
-            wings.position.z = 0.5; group.add(wings);
-            const prop = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 0.1), new THREE.MeshPhongMaterial({ color: 0x111111 }));
-            prop.position.z = 3.2; prop.name = "propeller"; group.add(prop);
-            plane = group; scene.add(plane);
+
+            // Matériaux colorés et brillants
+            const redMat = new THREE.MeshPhongMaterial({ color: 0xff3333, shininess: 80 });
+            const yellowMat = new THREE.MeshPhongMaterial({ color: 0xffeb3b, shininess: 80 });
+            const whiteMat = new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 80 });
+            const glassMat = new THREE.MeshPhongMaterial({ color: 0x33aaff, transparent: true, opacity: 0.6, shininess: 100 });
+
+            // 1. Fuselage chubby très arrondi (Sphère étirée)
+            const body = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), redMat);
+            body.scale.set(1.1, 1.0, 2.2); 
+            group.add(body);
+
+            // 2. Nez arrondi (Cône de nez jaune)
+            const nose = new THREE.Mesh(new THREE.SphereGeometry(0.7, 16, 16), yellowMat);
+            nose.position.set(0, 0, 3.0);
+            nose.scale.set(1, 1, 1.3);
+            group.add(nose);
+
+            // 3. Verrière de cockpit toute ronde
+            const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 16), glassMat);
+            canopy.position.set(0, 0.7, 0.4);
+            canopy.scale.set(0.8, 0.8, 1.4);
+            group.add(canopy);
+
+            // 4. Ailes principales douces et arrondies (Sphères plates)
+            const wingLeft = new THREE.Mesh(new THREE.SphereGeometry(1.6, 24, 24), redMat);
+            wingLeft.position.set(-3.0, -0.1, 0.4);
+            wingLeft.scale.set(2.0, 0.1, 0.7); 
+            group.add(wingLeft);
+
+            const wingRight = new THREE.Mesh(new THREE.SphereGeometry(1.6, 24, 24), redMat);
+            wingRight.position.set(3.0, -0.1, 0.4);
+            wingRight.scale.set(2.0, 0.1, 0.7); 
+            group.add(wingRight);
+
+            // Bouts d'ailes jaunes (Petites sphères rondes de signalisation)
+            const tipLeft = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), yellowMat);
+            tipLeft.position.set(-6.1, -0.1, 0.4);
+            group.add(tipLeft);
+
+            const tipRight = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), yellowMat);
+            tipRight.position.set(6.1, -0.1, 0.4);
+            group.add(tipRight);
+
+            // 5. Gouvernes et ailerons arrières tout ronds
+            const tailVert = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 16), redMat);
+            tailVert.position.set(0, 1.1, -2.6);
+            tailVert.scale.set(0.1, 1.2, 0.6);
+            group.add(tailVert);
+
+            const tailHoriz = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 16), redMat);
+            tailHoriz.position.set(0, 0, -2.6);
+            tailHoriz.scale.set(2.0, 0.1, 0.6);
+            group.add(tailHoriz);
+
+            // 6. Hélice cartoon avec pales douces
+            const propGroup = new THREE.Group();
+            propGroup.position.set(0, 0, 3.8);
+            propGroup.name = "propeller";
+
+            const propHub = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 16), yellowMat);
+            propGroup.add(propHub);
+
+            const blade1 = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 16), whiteMat);
+            blade1.position.set(0, 1.2, 0);
+            blade1.scale.set(0.3, 2.0, 0.08);
+            propGroup.add(blade1);
+
+            const blade2 = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 16), whiteMat);
+            blade2.position.set(0, -1.2, 0);
+            blade2.scale.set(0.3, 2.0, 0.08);
+            propGroup.add(blade2);
+
+            group.add(propGroup);
+
+            plane = group;
+            scene.add(plane);
+        }
+
+        // Système de création de la traînée derrière les ailes de l'avion
+        function spawnTrail() {
+            if (!gameActive) return;
+            // Positionnement au bout des ailes gauche et droite en coordonnées globales (World Space)
+            const leftPos = new THREE.Vector3(-6.1, -0.1, 0.4).applyMatrix4(plane.matrixWorld);
+            const rightPos = new THREE.Vector3(6.1, -0.1, 0.4).applyMatrix4(plane.matrixWorld);
+
+            const mat = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.45
+            });
+            const geom = new THREE.SphereGeometry(0.35, 8, 8);
+
+            [leftPos, rightPos].forEach(pos => {
+                const p = new THREE.Mesh(geom, mat.clone());
+                p.position.copy(pos);
+                p.userData = {
+                    life: 25,
+                    maxLife: 25,
+                    v: new THREE.Vector3((Math.random() - 0.5) * 0.04, (Math.random() - 0.5) * 0.04, -0.05)
+                };
+                scene.add(p);
+                trailParticles.push(p);
+            });
         }
 
         function createClouds() {
@@ -348,9 +494,10 @@
                 currentQuestions.push(pool[k % pool.length]);
             }
             
-            score = 0; questionIndex = 0; gameActive = true;
+            score = 0; questionIndex = 0; gameActive = true; isWaitingFeedback = false;
             document.getElementById('menu-screen').style.display = 'none';
             document.getElementById('result-screen').classList.add('hidden');
+            document.getElementById('feedback-banner').style.display = 'none';
             document.getElementById('ui-layer').classList.remove('hidden');
             document.getElementById('question-display').style.display = 'block';
             updateUI();
@@ -392,6 +539,7 @@
                 gate.userData = { isCorrect: optObj.isCorrect };
                 scene.add(gate); gates.push(gate);
             });
+            isWaitingFeedback = false;
         }
 
         function showRewardScreen() {
@@ -417,16 +565,16 @@
             if(finalScore >= 10) s3.classList.add('active');
             
             if(finalScore === maxQuestions) {
-                trophy.innerText = "🏆"; // Or + confettis
+                trophy.innerText = "🏆"; 
                 spawnConfetti(350); 
                 playWinSound();
             } else if(finalScore >= 10) {
-                trophy.innerText = "🥈"; // Argent
+                trophy.innerText = "🥈"; 
                 spawnConfetti(150);
             } else if(finalScore >= 6) {
-                trophy.innerText = "🥉"; // Bronze
+                trophy.innerText = "🥉"; 
             } else {
-                trophy.innerText = "💨"; // Vent (A encourager)
+                trophy.innerText = "💨"; 
             }
         }
 
@@ -449,10 +597,17 @@
         function clearParticles() {
             particles.forEach(p => { scene.remove(p); pScene.remove(p); });
             particles = [];
+            // Nettoyage de la traînée de l'avion
+            trailParticles.forEach(p => {
+                scene.remove(p);
+                p.material.dispose();
+                p.geometry.dispose();
+            });
+            trailParticles = [];
         }
 
         function handleKeyDown(e) {
-            if(!gameActive) return;
+            if(!gameActive || isWaitingFeedback) return;
             let old = currentPosKey;
             if(e.key === "ArrowLeft") currentPosKey = currentPosKey.replace("R", "L");
             if(e.key === "ArrowRight") currentPosKey = currentPosKey.replace("L", "R");
@@ -463,7 +618,7 @@
         }
 
         function handleTouch(e) {
-            if(!gameActive) return;
+            if(!gameActive || isWaitingFeedback) return;
             e.preventDefault();
             const touch = e.touches[0];
             const x = touch.clientX / window.innerWidth;
@@ -495,7 +650,9 @@
             return texture;
         }
 
-        function showFeedback(correct) {
+        function showFeedback(correct, correctText = "") {
+            isWaitingFeedback = true; // Empêche les multiples collisions
+
             if(correct) {
                 playWinSound();
                 for(let i=0; i<15; i++) {
@@ -504,17 +661,34 @@
                     p.userData = { v: new THREE.Vector3((Math.random()-0.5)*0.5, (Math.random()-0.5)*0.5, Math.random()*0.3), life: 60 };
                     scene.add(p); particles.push(p);
                 }
+                
+                // Transition rapide (succès)
+                setTimeout(() => {
+                    questionIndex++;
+                    nextCycle();
+                }, 800);
             } else {
-                const el = document.createElement('div');
-                el.innerText = "❌";
-                el.style.cssText = "position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:100px;z-index:200;pointer-events:none;color:red;font-weight:bold;text-shadow: 2px 2px 10px black;";
-                document.body.appendChild(el);
-                setTimeout(() => el.remove(), 600);
+                playLoseSound();
+                
+                const banner = document.getElementById('feedback-banner');
+                const correctAnswerDisplay = document.getElementById('feedback-correct-answer');
+                
+                // Affiche juste la bonne réponse doucement
+                correctAnswerDisplay.innerText = correctText;
+                banner.style.display = 'flex';
+                
+                // Pause pour laisser l'élève lire
+                setTimeout(() => {
+                    banner.style.display = 'none';
+                    questionIndex++;
+                    nextCycle();
+                }, 2500);
             }
         }
 
         function animate() {
             requestAnimationFrame(animate);
+            frameCount++;
             
             // Lissage mouvement avion
             plane.position.x += (targetPos.x - plane.position.x) * 0.12;
@@ -523,13 +697,37 @@
             const prop = plane.getObjectByName("propeller");
             if(prop) prop.rotation.z += 2.2;
 
-            // Décor
+            // Déclenchement de la traînée de l'avion
+            if(gameActive && !isWaitingFeedback && frameCount % 2 === 0) {
+                spawnTrail();
+            }
+
+            // Décor (nuages)
             clouds.forEach(c => {
                 c.position.z += speed;
                 if(c.position.z > 30) c.position.z = -220;
             });
 
-            // Particules (Confettis et Feedback)
+            // Mise à jour de la traînée
+            for(let i = trailParticles.length-1; i >= 0; i--) {
+                const p = trailParticles[i];
+                p.position.add(p.userData.v);
+                p.position.z += speed; // Recul en phase avec le monde
+                p.userData.life--;
+
+                const ratio = p.userData.life / p.userData.maxLife;
+                p.scale.set(ratio, ratio, ratio);
+                p.material.opacity = ratio * 0.45;
+
+                if(p.userData.life <= 0) {
+                    scene.remove(p);
+                    p.material.dispose();
+                    p.geometry.dispose();
+                    trailParticles.splice(i, 1);
+                }
+            }
+
+            // Particules (Confettis et Feedback de victoire)
             for(let i=particles.length-1; i>=0; i--) {
                 const p = particles[i];
                 p.position.add(p.userData.v); 
@@ -546,21 +744,31 @@
                 }
             }
 
-            if(gameActive) {
+            // Gestion propre des collisions avec un verrou
+            if(gameActive && !isWaitingFeedback) {
+                let collisionHandled = false; // Le fameux verrou pour le bug des sauts de question
+
                 gates.forEach((g) => {
+                    if (collisionHandled) return;
+
                     g.position.z += speed;
                     if(g.position.z > 17 && g.position.z < 20) {
                         const dist = plane.position.distanceTo(new THREE.Vector3(g.position.x, g.position.y, plane.position.z));
                         if(dist < 5.5) {
-                            if(g.userData.isCorrect) { score += 10; showFeedback(true); }
-                            else { showFeedback(false); }
-                            questionIndex++;
-                            nextCycle();
+                            collisionHandled = true; // Bloque les autres anneaux de cette vague
+                            const currentQuestion = currentQuestions[questionIndex];
+                            if(g.userData.isCorrect) { 
+                                score += 10; 
+                                showFeedback(true); 
+                            } else { 
+                                showFeedback(false, currentQuestion.correctAnswerText); 
+                            }
                         }
                     } else if(g.position.z > 25) {
-                        showFeedback(false);
-                        questionIndex++;
-                        nextCycle();
+                        // Avion a manqué tous les anneaux
+                        collisionHandled = true;
+                        const currentQuestion = currentQuestions[questionIndex];
+                        showFeedback(false, currentQuestion.correctAnswerText);
                     }
                 });
             }
@@ -595,6 +803,7 @@
         function endGame() {
             gameActive = false; clearGates(); clearParticles();
             if(motorGain) motorGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.2);
+            document.getElementById('feedback-banner').style.display = 'none';
             document.getElementById('ui-layer').classList.add('hidden');
             document.getElementById('menu-screen').style.display = 'flex';
         }
